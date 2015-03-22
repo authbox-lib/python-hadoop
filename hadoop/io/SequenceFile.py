@@ -27,17 +27,15 @@ from compress import CodecPool
 
 from WritableUtils import readVInt, writeVInt
 from Writable import Writable
-from OutputStream import FileOutputStream, DataOutputStream, DataOutputBuffer
-from InputStream import FileInputStream, DataInputStream, DataInputBuffer
-from VersionMismatchException import VersionMismatchException, VersionPrefixException
+from OutputStream import *
+from InputStream import *
 
 from Text import Text
 
 BLOCK_COMPRESS_VERSION  = '\x04'
 CUSTOM_COMPRESS_VERSION = '\x05'
 VERSION_WITH_METADATA   = '\x06'
-VERSION_PREFIX = 'SEQ'
-VERSION = VERSION_PREFIX + VERSION_WITH_METADATA
+VERSION = 'SEQ' + VERSION_WITH_METADATA
 
 SYNC_ESCAPE = -1
 SYNC_HASH_SIZE = 16
@@ -97,31 +95,33 @@ class Metadata(Writable):
             value = Text.readString(data_input)
             self._meta[key] = value
 
-def createWriter(path, key_class, value_class, metadata=None, compression_type=CompressionType.NONE):
+def createWriter(path, key_class, value_class, metadata=None, compression_type=CompressionType.NONE, compression_codec=None):
     kwargs = {}
 
     if compression_type == CompressionType.NONE:
         pass
     elif compression_type == CompressionType.RECORD:
         kwargs['compress'] = True
+        kwargs['compression_codec'] = compression_codec
     elif compression_type == CompressionType.BLOCK:
         kwargs['compress'] = True
         kwargs['block_compress'] = True
+        kwargs['compression_codec'] = compression_codec
     else:
         raise NotImplementedError("Compression Type Not Supported")
 
     return Writer(path, key_class, value_class, metadata, **kwargs)
 
-def createRecordWriter(path, key_class, value_class, metadata=None):
-    return Writer(path, key_class, value_class, metadata, compress=True)
+def createRecordWriter(path, key_class, value_class, metadata=None, compression_codec=None):
+    return Writer(path, key_class, value_class, metadata, compress=True, compression_codec=compression_codec)
 
-def createBlockWriter(path, key_class, value_class, metadata=None):
-    return Writer(path, key_class, value_class, metadata, compress=True, block_compress=True)
+def createBlockWriter(path, key_class, value_class, metadata=None, compression_codec=None):
+    return Writer(path, key_class, value_class, metadata, compress=True, block_compress=True, compression_codec=compression_codec)
 
 class Writer(object):
     COMPRESSION_BLOCK_SIZE = 1000000
 
-    def __init__(self, path, key_class, value_class, metadata, compress=False, block_compress=False):
+    def __init__(self, path, key_class, value_class, metadata, compress=False, block_compress=False, compression_codec=None):
         if os.path.exists(path):
             raise IOError("File %s already exists." % path)
 
@@ -135,7 +135,10 @@ class Writer(object):
         self._metadata = metadata
 
         if self._compress or self._block_compress:
-            self._codec = CodecPool().getCompressor()
+            if compression_codec:
+                self._codec = compression_codec
+            else:
+                self._codec = CodecPool().getCompressor()
         else:
             self._codec = None
 
@@ -183,7 +186,7 @@ class Writer(object):
             raise IOError("Wrong key class %s is not %s" % (type(key), self._key_class))
 
         if type(value) != self._value_class:
-            raise IOError("Wrong Value class %s is not %s" % (type(value), self._value_class))
+            raise IOError("Wrong Value class %s is not %s" % (type(key), self._key_class))
 
         key_buffer = DataOutputBuffer()
         key.write(key_buffer)
@@ -263,7 +266,7 @@ class Writer(object):
         self._stream.writeBoolean(self._block_compress)
 
         if self._codec:
-            Text.writeString(self._stream, 'org.apache.hadoop.io.compress.DefaultCodec')
+            Text.writeString(self._stream, hadoopClassName(self._codec.__class__))
 
         self._metadata.write(self._stream)
         self._stream.write(self._sync)
@@ -285,10 +288,8 @@ class Reader(object):
         self._metadata = None
 
         self._record = DataInputBuffer()
-        self._initialize(path, start, length)
 
-    def getStream(self, path):
-        return DataInputStream(FileInputStream(path))
+        self._initialize(path, start, length)
 
     def close(self):
         self._stream.close()
@@ -435,7 +436,7 @@ class Reader(object):
         return self._sync_seen
 
     def _initialize(self, path, start, length):
-        self._stream = self.getStream(path)
+        self._stream = DataInputStream(FileInputStream(path))
 
         if length == 0:
             self._end = self._stream.getPos() + self._stream.length()
@@ -445,14 +446,9 @@ class Reader(object):
         # Parse Header
         version_block = self._stream.read(len(VERSION))
 
-        if not version_block.startswith(VERSION_PREFIX):
-            raise VersionPrefixException(VERSION_PREFIX,
-                                         version_block[0:len(VERSION_PREFIX)])
-
-        self._version = version_block[len(VERSION_PREFIX)]
-        if self._version > VERSION[len(VERSION_PREFIX)]:
-            raise VersionMismatchException(VERSION[len(VERSION_PREFIX)],
-                                           self._version)
+        self._version = version_block[3]
+        if self._version > VERSION[3]:
+            raise VersionMismatchException(VERSION[3], self._version)
 
         if self._version < BLOCK_COMPRESS_VERSION:
             # Same as below, but with UTF8 Deprecated Class
