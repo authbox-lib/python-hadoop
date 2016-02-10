@@ -16,30 +16,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from hadoop.io.SequenceFile import CompressionType
-from hadoop.io import LongWritable
-from hadoop.io import SequenceFile
-
-def writeData(writer):
-    key = LongWritable()
-    value = LongWritable()
-
-    for i in range(1000):
-        key.set(1000 - i)
-        value.set(i)
-        print('[%d] %s %s' % (writer.getLength(), key.toString(), value.toString()))
-        writer.append(key, value)
+from hadoop.io.IntWritable import LongWritable
+from hadoop.io import MapFile
 
 if __name__ == '__main__':
-    writer = SequenceFile.createWriter('test.seq', LongWritable, LongWritable)
-    writeData(writer)
+    writer = MapFile.Writer('map-test', LongWritable, LongWritable)
+    writer.INDEX_INTERVAL = 2
+    for i in xrange(0, 100, 2):
+        writer.append(LongWritable(i), LongWritable(i * 10))
     writer.close()
 
-    writer = SequenceFile.createWriter('test-record.seq', LongWritable, LongWritable, compression_type=CompressionType.RECORD)
-    writeData(writer)
-    writer.close()
+    key = LongWritable()
+    value = LongWritable()
+    reader = MapFile.Reader('map-test')
+    while reader.next(key, value):
+        print key, value
 
-    writer = SequenceFile.createWriter('test-block.seq', LongWritable, LongWritable, compression_type=CompressionType.BLOCK)
-    writeData(writer)
-    writer.close()
+    print 'MID KEY', reader.midKey()
+    print 'FINAL KEY', reader.finalKey(key), key
 
+    print 'GET CLOSEST'
+    key.set(8)
+    print reader.get(key, value)
+    print value
+    print
+
+    print 'GET 111'
+    key.set(111)
+    print reader.get(key, value)
+    print
+
+    key.set(25)
+    print 'SEEK 25 before'
+    print reader.getClosest(key, value, before=True)
+    print value
+    print
+
+    key.set(55)
+    print 'SEEK 55'
+    print reader.getClosest(key, value)
+    print value
+    print
+
+    reader.close()

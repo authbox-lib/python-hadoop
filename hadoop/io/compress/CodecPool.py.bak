@@ -16,22 +16,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .NullWritable import NullWritable
-from . import MapFile
+from hadoop.util import ReflectionUtils
 
-class Writer(MapFile.Writer):
-    def __init__(self, path, key_class):
-        super(Writer, self).__init__(path, key_class, NullWritable)
+from BZip2Codec import *
+from ZlibCodec import *
+from GzipCodec import *
+from LzoCodec import *
 
-    def append(self, key):
-        return super(Writer, self).append(key, NullWritable())
+class CodecPool(object):
+    def __new__(cls, *p, **k):
+        if not '_shared_instance' in cls.__dict__:
+            cls._shared_instance = object.__new__(cls)
+        return cls._shared_instance
 
-class Reader(MapFile.Reader):
-    def next(self, key):
-        return super(Reader, self).next(key, NullWritable())
+    def getDecompressor(self, class_path=None):
+        if not class_path:
+            return DefaultCodec()
+        codec_class = ReflectionUtils.hadoopClassFromName(class_path)
+        return codec_class()
 
-    def get(self, key):
-        if self.seek(key):
-            return self._next_key
-        return None
+    def getCompressor(self, class_path=None):
+        if not class_path:
+            return DefaultCodec()
+        codec_class = ReflectionUtils.hadoopClassFromName(class_path)
+        return codec_class()
 

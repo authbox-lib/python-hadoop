@@ -16,22 +16,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .NullWritable import NullWritable
-from . import MapFile
+import sys
 
-class Writer(MapFile.Writer):
-    def __init__(self, path, key_class):
-        super(Writer, self).__init__(path, key_class, NullWritable)
+from hadoop.io import SequenceFile
 
-    def append(self, key):
-        return super(Writer, self).append(key, NullWritable())
+if __name__ == '__main__':
+    if len(sys.argv) < 2:
+        print 'usage: SequenceFileReader <filename>'
+    else:
+        reader = SequenceFile.Reader(sys.argv[1])
 
-class Reader(MapFile.Reader):
-    def next(self, key):
-        return super(Reader, self).next(key, NullWritable())
+        key_class = reader.getKeyClass()
+        value_class = reader.getValueClass()
 
-    def get(self, key):
-        if self.seek(key):
-            return self._next_key
-        return None
+        key = key_class()
+        value = value_class()
+
+        #reader.sync(4042)
+        position = reader.getPosition()
+        while reader.next(key, value):
+            print '*' if reader.syncSeen() else ' ',
+            print '[%6s] %6s %6s' % (position, key.toString(), value.toString())
+            position = reader.getPosition()
+
+        reader.close()
 

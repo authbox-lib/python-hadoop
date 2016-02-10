@@ -16,22 +16,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .NullWritable import NullWritable
-from . import MapFile
+import OutputStream
+import InputStream
 
-class Writer(MapFile.Writer):
-    def __init__(self, path, key_class):
-        super(Writer, self).__init__(path, key_class, NullWritable)
+import SequenceFile
+import ArrayFile
+import MapFile
+import SetFile
 
-    def append(self, key):
-        return super(Writer, self).append(key, NullWritable())
+from Writable import *
+from IntWritable import *
+from Text import *
+import WritableUtils
 
-class Reader(MapFile.Reader):
-    def next(self, key):
-        return super(Reader, self).next(key, NullWritable())
-
-    def get(self, key):
-        if self.seek(key):
-            return self._next_key
-        return None
-
+import compress

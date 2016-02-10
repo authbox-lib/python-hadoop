@@ -16,22 +16,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .NullWritable import NullWritable
-from . import MapFile
+import gzip
 
-class Writer(MapFile.Writer):
-    def __init__(self, path, key_class):
-        super(Writer, self).__init__(path, key_class, NullWritable)
+from hadoop.io.InputStream import DataInputBuffer
+import StringIO
 
-    def append(self, key):
-        return super(Writer, self).append(key, NullWritable())
+class GzipCodec:
+    def compress(self, data):
+        ioObj = StringIO.StringIO()
+        f = gzip.GzipFile(fileobj = ioObj, mode='wb')
+        f.write(data)
+        f.close()
+        return ioObj.getvalue()
 
-class Reader(MapFile.Reader):
-    def next(self, key):
-        return super(Reader, self).next(key, NullWritable())
+    def decompress(self, data):
+        ioObj = StringIO.StringIO(data)
+        f = gzip.GzipFile(fileobj = ioObj, mode='rb')
+        d = f.read()
+        f.close()
+        return d
 
-    def get(self, key):
-        if self.seek(key):
-            return self._next_key
-        return None
-
+    def decompressInputStream(self, data):
+        return DataInputBuffer(self.decompress(data))
