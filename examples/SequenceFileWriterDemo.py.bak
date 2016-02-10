@@ -16,22 +16,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .NullWritable import NullWritable
-from . import MapFile
+from hadoop.io.SequenceFile import CompressionType
+from hadoop.io import LongWritable
+from hadoop.io import SequenceFile
 
-class Writer(MapFile.Writer):
-    def __init__(self, path, key_class):
-        super(Writer, self).__init__(path, key_class, NullWritable)
+def writeData(writer):
+    key = LongWritable()
+    value = LongWritable()
 
-    def append(self, key):
-        return super(Writer, self).append(key, NullWritable())
+    for i in xrange(1000):
+        key.set(1000 - i)
+        value.set(i)
+        print '[%d] %s %s' % (writer.getLength(), key.toString(), value.toString())
+        writer.append(key, value)
 
-class Reader(MapFile.Reader):
-    def next(self, key):
-        return super(Reader, self).next(key, NullWritable())
+if __name__ == '__main__':
+    writer = SequenceFile.createWriter('test.seq', LongWritable, LongWritable)
+    writeData(writer)
+    writer.close()
 
-    def get(self, key):
-        if self.seek(key):
-            return self._next_key
-        return None
+    writer = SequenceFile.createWriter('test-record.seq', LongWritable, LongWritable, compression_type=CompressionType.RECORD)
+    writeData(writer)
+    writer.close()
+
+    writer = SequenceFile.createWriter('test-block.seq', LongWritable, LongWritable, compression_type=CompressionType.BLOCK)
+    writeData(writer)
+    writer.close()
 
